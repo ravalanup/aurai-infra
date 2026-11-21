@@ -1,0 +1,169 @@
+# Default values for the aurai-platform chart.
+# Environment files (values-local.yaml, values-aws.yaml, values-<env>.yaml) override these.
+
+global:
+  environment: local
+  imagePullPolicy: IfNotPresent
+
+# Namespaces for the other Aurai repositories. Services in these namespaces may reach the
+# shared data stores because the namespaces carry the label aurai.io/platform-access=true.
+namespaces:
+  create: true
+  podSecurity: baseline
+  names:
+    - aurai-gateway
+    - aurai-workspace
+    - aurai-knowledge
+    - aurai-agents
+    - aurai-observability
+
+# StorageClass for EKS (gp3 via the EBS CSI driver). Leave disabled on kind.
+storageClass:
+  create: false
+  name: gp3
+  default: false
+  reclaimPolicy: Delete
+
+# PostgreSQL. In-cluster for local development only; AWS uses RDS (see terraform/).
+postgres:
+  enabled: true
+  image: postgres:16.4
+  database: aurai
+  username: aurai
+  # LOCAL DEVELOPMENT ONLY. Never set a real password here; use existingSecret instead.
+  password: ""
+  existingSecret: ""
+  storage: 5Gi
+  storageClassName: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+
+# Redis. In-cluster for local development only; AWS uses ElastiCache.
+redis:
+  enabled: true
+  image: redis:7.4.1
+  storage: 1Gi
+  storageClassName: ""
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+
+# Qdrant vector store (runs in-cluster in every environment).
+qdrant:
+  enabled: true
+  image: qdrant/qdrant:v1.12.4
+  storage: 10Gi
+  storageClassName: ""
+  # Optional: name of a Secret containing the API key under key "api-key".
+  apiKeySecret: ""
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      memory: 2Gi
+
+# Keycloak identity provider (OIDC).
+keycloak:
+  enabled: true
+  image: quay.io/keycloak/keycloak:26.0.7
+  # dev: start-dev with embedded database (local only). production: external database, proxy headers.
+  mode: dev
+  hostname: ""
+  admin:
+    username: admin
+    # LOCAL DEVELOPMENT ONLY. Use existingSecret (keys: username, password) elsewhere.
+    password: ""
+    existingSecret: ""
+  database:
+    host: ""
+    port: 5432
+    name: keycloak
+    # Secret with keys "username" and "password".
+    existingSecret: ""
+  resources:
+    requests:
+      cpu: 250m
+      memory: 768Mi
+    limits:
+      memory: 1536Mi
+
+# OpenTelemetry collector: single trace pipeline for all Aurai services.
+# Langfuse and Phoenix exporters are added by aurai-eval-governance.
+otelCollector:
+  enabled: true
+  image: otel/opentelemetry-collector-contrib:0.114.0
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      memory: 512Mi
+  config:
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+    processors:
+      memory_limiter:
+        check_interval: 1s
+        limit_percentage: 80
+        spike_limit_percentage: 25
+      batch: {}
+    exporters:
+      debug:
+        verbosity: basic
+    service:
+      extensions: [health_check]
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [debug]
+
+# Network policy: default deny ingress in the platform namespace, then allow
+# same-namespace traffic and the labeled Aurai namespaces.
+# Note: kind's default CNI does not enforce NetworkPolicy; use Calico or Cilium to test enforcement.
+networkPolicies:
+  enabled: true
+  # CIDRs allowed to reach Keycloak (for example the VPC CIDR when an ALB uses IP targets).
+  allowedIngressCIDRs: []
+
+# Optional Ingress for Keycloak (AWS uses the AWS Load Balancer Controller).
+ingress:
+  enabled: false
+  className: alb
+  annotations: {}
+  host: ""
+  tls: []
+
+# External Secrets Operator integration (AWS Secrets Manager). The operator itself is a prerequisite.
+externalSecrets:
+  enabled: false
+  refreshInterval: 1h
+  clusterSecretStore:
+    create: false
+    name: aurai-aws-secrets
+    region: us-east-1
+    serviceAccountName: external-secrets
+    serviceAccountNamespace: external-secrets
+  # Each item creates a Kubernetes Secret from Secrets Manager.
+  # - name: keycloak-admin
+  #   data:
+  #     - secretKey: username
+  #       remoteKey: aurai-prod/keycloak/admin
+  #       property: username
+  secrets: []

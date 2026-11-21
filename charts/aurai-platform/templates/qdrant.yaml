@@ -1,0 +1,87 @@
+{{- if .Values.qdrant.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: qdrant
+  labels:
+    {{- include "aurai.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 6333
+      targetPort: http
+    - name: grpc
+      port: 6334
+      targetPort: grpc
+  selector:
+    {{- include "aurai.selectorLabels" (dict "name" "qdrant" "root" .) | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: qdrant
+  labels:
+    {{- include "aurai.labels" . | nindent 4 }}
+spec:
+  serviceName: qdrant
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "aurai.selectorLabels" (dict "name" "qdrant" "root" .) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "aurai.selectorLabels" (dict "name" "qdrant" "root" .) | nindent 8 }}
+    spec:
+      securityContext:
+        {{- include "aurai.podSecurityContext" . | nindent 8 }}
+        fsGroup: 1000
+      containers:
+        - name: qdrant
+          image: {{ .Values.qdrant.image }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: 6333
+            - name: grpc
+              containerPort: 6334
+          {{- if .Values.qdrant.apiKeySecret }}
+          env:
+            - name: QDRANT__SERVICE__API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.qdrant.apiKeySecret }}
+                  key: api-key
+          {{- end }}
+          securityContext:
+            allowPrivilegeEscalation: false
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.qdrant.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /qdrant/storage
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- if .Values.qdrant.storageClassName }}
+        storageClassName: {{ .Values.qdrant.storageClassName }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.qdrant.storage }}
+{{- end }}

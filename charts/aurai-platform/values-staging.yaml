@@ -1,0 +1,16 @@
+global:
+  environment: staging
+
+qdrant:
+  storage: 50Gi
+
+keycloak:
+  hostname: keycloak.staging.aurai.example.invalid
+
+ingress:
+  host: keycloak.staging.aurai.example.invalid
+
+networkPolicies:
+  # Replace with the staging VPC CIDR from `terraform output vpc_cidr`.
+  allowedIngressCIDRs:
+    - 10.20.0.0/16

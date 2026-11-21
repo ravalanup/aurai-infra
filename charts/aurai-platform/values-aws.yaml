@@ -1,0 +1,66 @@
+# Shared AWS settings for dev, staging and prod. Environment files layer on top of this one:
+#   helm upgrade --install aurai-platform charts/aurai-platform -n aurai-system \
+#     -f charts/aurai-platform/values-aws.yaml -f charts/aurai-platform/values-<env>.yaml
+#
+# Values marked REPLACE come from Terraform outputs or your DNS/certificate setup.
+
+# PostgreSQL and Redis are managed services in AWS (RDS and ElastiCache).
+postgres:
+  enabled: false
+
+redis:
+  enabled: false
+
+storageClass:
+  create: true
+  name: gp3
+
+qdrant:
+  storageClassName: gp3
+  storage: 50Gi
+
+keycloak:
+  mode: production
+  hostname: REPLACE.example.invalid
+  admin:
+    existingSecret: keycloak-admin
+  database:
+    host: REPLACE-rds-endpoint
+    name: keycloak
+    existingSecret: keycloak-db
+
+ingress:
+  enabled: true
+  className: alb
+  host: REPLACE.example.invalid
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internal
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/certificate-arn: REPLACE
+
+externalSecrets:
+  enabled: true
+  clusterSecretStore:
+    create: true
+  secrets:
+    - name: keycloak-admin
+      data:
+        - secretKey: username
+          remoteKey: REPLACE-env/keycloak/admin
+          property: username
+        - secretKey: password
+          remoteKey: REPLACE-env/keycloak/admin
+          property: password
+    - name: keycloak-db
+      data:
+        - secretKey: username
+          remoteKey: REPLACE-rds-managed-secret-arn
+          property: username
+        - secretKey: password
+          remoteKey: REPLACE-rds-managed-secret-arn
+          property: password
+
+networkPolicies:
+  enabled: true
+  allowedIngressCIDRs: []

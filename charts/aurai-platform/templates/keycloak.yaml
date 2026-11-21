@@ -1,0 +1,122 @@
+{{- if .Values.keycloak.enabled }}
+{{- $adminSecret := default "aurai-keycloak-admin" .Values.keycloak.admin.existingSecret }}
+{{- if not .Values.keycloak.admin.existingSecret }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: aurai-keycloak-admin
+  labels:
+    {{- include "aurai.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  username: {{ .Values.keycloak.admin.username | quote }}
+  password: {{ required "keycloak.admin.password must be set for local development, or set keycloak.admin.existingSecret" .Values.keycloak.admin.password | quote }}
+---
+{{- end }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  labels:
+    {{- include "aurai.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+  selector:
+    {{- include "aurai.selectorLabels" (dict "name" "keycloak" "root" .) | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  labels:
+    {{- include "aurai.labels" . | nindent 4 }}
+spec:
+  # A single replica. High availability needs Keycloak distributed caching; see docs/secrets-and-identity.md.
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "aurai.selectorLabels" (dict "name" "keycloak" "root" .) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "aurai.selectorLabels" (dict "name" "keycloak" "root" .) | nindent 8 }}
+    spec:
+      securityContext:
+        {{- include "aurai.podSecurityContext" . | nindent 8 }}
+        runAsNonRoot: true
+      containers:
+        - name: keycloak
+          image: {{ .Values.keycloak.image }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          {{- if eq .Values.keycloak.mode "dev" }}
+          args: ["start-dev"]
+          {{- else }}
+          args: ["start"]
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: management
+              containerPort: 9000
+          env:
+            - name: KC_BOOTSTRAP_ADMIN_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $adminSecret }}
+                  key: username
+            - name: KC_BOOTSTRAP_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $adminSecret }}
+                  key: password
+            - name: KC_HEALTH_ENABLED
+              value: "true"
+            - name: KC_METRICS_ENABLED
+              value: "true"
+            {{- if .Values.keycloak.database.host }}
+            - name: KC_DB
+              value: postgres
+            - name: KC_DB_URL
+              value: {{ printf "jdbc:postgresql://%s:%v/%s" .Values.keycloak.database.host .Values.keycloak.database.port .Values.keycloak.database.name | quote }}
+            - name: KC_DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "keycloak.database.existingSecret is required when keycloak.database.host is set" .Values.keycloak.database.existingSecret }}
+                  key: username
+            - name: KC_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.keycloak.database.existingSecret }}
+                  key: password
+            {{- end }}
+            {{- if ne .Values.keycloak.mode "dev" }}
+            - name: KC_HOSTNAME
+              value: {{ required "keycloak.hostname is required outside dev mode" .Values.keycloak.hostname | quote }}
+            - name: KC_HTTP_ENABLED
+              value: "true"
+            - name: KC_PROXY_HEADERS
+              value: xforwarded
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: management
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: management
+            initialDelaySeconds: 60
+            periodSeconds: 20
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            {{- toYaml .Values.keycloak.resources | nindent 12 }}
+{{- end }}

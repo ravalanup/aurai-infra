@@ -1,0 +1,16 @@
+global:
+  environment: dev
+
+qdrant:
+  storage: 20Gi
+
+keycloak:
+  hostname: keycloak.dev.aurai.example.invalid
+
+ingress:
+  host: keycloak.dev.aurai.example.invalid
+
+networkPolicies:
+  # Replace with the dev VPC CIDR from `terraform output vpc_cidr`.
+  allowedIngressCIDRs:
+    - 10.10.0.0/16

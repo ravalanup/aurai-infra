@@ -1,0 +1,13 @@
+{{- if .Values.namespaces.create }}
+{{- range .Values.namespaces.names }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ . }}
+  labels:
+    app.kubernetes.io/part-of: aurai
+    aurai.io/platform-access: "true"
+    pod-security.kubernetes.io/enforce: {{ $.Values.namespaces.podSecurity | quote }}
+{{- end }}
+{{- end }}

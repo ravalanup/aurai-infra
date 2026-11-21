@@ -1,0 +1,31 @@
+global:
+  environment: prod
+
+storageClass:
+  reclaimPolicy: Retain
+
+qdrant:
+  storage: 200Gi
+  resources:
+    requests:
+      cpu: 1
+      memory: 4Gi
+    limits:
+      memory: 8Gi
+
+keycloak:
+  hostname: keycloak.aurai.example.invalid
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1536Mi
+    limits:
+      memory: 2Gi
+
+ingress:
+  host: keycloak.aurai.example.invalid
+
+networkPolicies:
+  # Replace with the prod VPC CIDR from `terraform output vpc_cidr`.
+  allowedIngressCIDRs:
+    - 10.30.0.0/16

@@ -1,0 +1,14 @@
+# Local kind cluster. Passwords below are for local development only and protect nothing real.
+global:
+  environment: local
+
+postgres:
+  password: aurai-local-dev-only
+
+keycloak:
+  mode: dev
+  admin:
+    password: aurai-local-dev-only
+
+networkPolicies:
+  enabled: true

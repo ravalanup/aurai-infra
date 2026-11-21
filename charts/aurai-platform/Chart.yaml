@@ -1,0 +1,12 @@
+apiVersion: v2
+name: aurai-platform
+description: Shared foundation services for the Aurai enterprise AI platform (data stores, identity, tracing pipeline, network policy)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - aurai
+  - platform
+  - foundation
+maintainers:
+  - name: Aurai platform team
