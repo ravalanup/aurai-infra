@@ -1,0 +1,45 @@
+name: helm
+
+on:
+  pull_request:
+    paths:
+      - "charts/**"
+      - ".github/workflows/helm.yml"
+  push:
+    branches: [main]
+    paths:
+      - "charts/**"
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+
+      - name: Install kubeconform
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz
+          sudo mv kubeconform /usr/local/bin/
+
+      - name: Lint (all environments)
+        run: make lint
+
+      - name: Render and validate against Kubernetes schemas
+        run: |
+          set -euo pipefail
+          for env in local dev staging prod; do
+            echo "== $env =="
+            if [ "$env" = "local" ]; then
+              helm template aurai-platform charts/aurai-platform -f charts/aurai-platform/values-local.yaml > "/tmp/$env.yaml"
+            else
+              helm template aurai-platform charts/aurai-platform \
+                -f charts/aurai-platform/values-aws.yaml -f "charts/aurai-platform/values-$env.yaml" > "/tmp/$env.yaml"
+            fi
+            # CRDs such as ExternalSecret have no bundled schema; skip them.
+            kubeconform -strict -summary -ignore-missing-schemas -kubernetes-version 1.31.0 "/tmp/$env.yaml"
+          done
